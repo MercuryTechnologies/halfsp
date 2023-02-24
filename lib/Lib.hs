@@ -60,6 +60,7 @@ import Language.LSP.Server
     defaultOptions,
     getRootPath,
     requestHandler,
+    notificationHandler,
     runLspT,
     runServer,
     type (<~>) (Iso),
@@ -269,6 +270,12 @@ handleDefinitionRequest = requestHandler STextDocumentDefinition $ \RequestMessa
               Nothing -> Left $ ResponseError InternalError "Unable to go to definition" Nothing
               Just l -> Right $ InR $ InL $ List l
 
+handleChangeConfiguration :: Handlers (LspT c IO)
+handleChangeConfiguration = notificationHandler SWorkspaceDidChangeConfiguration $ pure $ pure ()
+
+handleInitialized :: Handlers (LspT c IO)
+handleInitialized = notificationHandler SInitialized $ pure $ pure ()
+
 doInitialize :: LanguageContextEnv a -> Message 'Initialize -> IO (Either ResponseError (LanguageContextEnv a))
 doInitialize env _ = runExceptT $ do
   wsroot <- getWsRootInit
@@ -316,13 +323,15 @@ indexInGhcid = do
 serverDef :: ServerDefinition ()
 serverDef =
   ServerDefinition
-    { onConfigurationChange = const $ pure $ Left "Changing configuration is not supported",
+    { onConfigurationChange = \conf _ -> Right conf,
       doInitialize = Lib.doInitialize,
       staticHandlers =
         mconcat
           [ handleWorkspaceSymbolRequest,
             handleTextDocumentHoverRequest,
-            handleDefinitionRequest
+            handleDefinitionRequest,
+            handleChangeConfiguration,
+            handleInitialized
           ],
       interpretHandler = \env -> Iso (runLspT env) liftIO,
       options = defaultOptions,
